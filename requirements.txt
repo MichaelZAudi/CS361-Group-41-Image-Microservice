@@ -1,5 +1,3 @@
 Flask
 gunicorn
 google-genai
-PIL
-climage
