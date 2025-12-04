@@ -1,5 +1,10 @@
 from flask import Flask, jsonify, request
-import random
+from google import genai
+from google.genai import types
+from PIL import Image
+import climage
+
+client = genai.Client()
 
 app = Flask(__name__)
 
@@ -10,72 +15,30 @@ def health_check():
     return jsonify({'status': 'healthy'}), 200
 
 
-@app.route('/rand/num', methods = ['POST'])
+@app.route('/image/prompt', methods = ['POST'])
 def random_number():
     in_data = request.get_json()
-    type = in_data.get('type')
-    start = in_data.get('start')
-    end = in_data.get('end')
+    prompt = in_data.get('prompt')
 
-    # no type, error
-    if not type:
+    # no prompt, error
+    if not prompt:
         return jsonify({'status': 'error',
-                        'error_message': 'need a type (int or float) to return'}), 400
-    # no start, error
-    if not start:
-        return jsonify({'status': 'error',
-                        'error_message': 'need a start value'}), 400
-    # no end, error
-    if not end:
-        return jsonify({'status': 'error',
-                        'error_message': 'need an end value'}), 400
+                        'error_message': 'no valid prompt identified'}), 400
 
-    # create a random int or float as requested
-    rand_num = 0
-    if type == 'int':
-        rand_num = random.randrange(start, end)
-    elif type == 'float':
-        rand_num = random.uniform(start, end)
+    # create an image from the prompt
+    response = client.models.generate_content(
+        model="gemini-2.5-flash-image",
+        contents=[prompt],
+    )
+
+    for part in response.parts:
+        if part.text is not None:
+            return jsonify({'status': 'error',
+                            'error_message': part.text}), 400
+        elif part.inline_data is not None:
+            image = part.as_image()
+            ret_image = climage.convert_pil(image, is_unicode=True)
 
     # success
     return jsonify({'status': 'success',
-                    'return_value': rand_num}), 200
-
-
-@app.route('/rand/event', methods = ['POST'])
-def random_event():
-    in_data = request.get_json()
-    events = in_data.get('events', [])
-
-    # no events, error
-    if not events:
-        return jsonify({'status': 'error',
-                        'error_message': 'need a list of events'}), 400
-
-    # success
-    return jsonify({'status': 'success',
-                    'return_value': random.choice(events)}), 200
-
-
-@app.route('/rand/weighted', methods = ['POST'])
-def random_weighted_event():
-    in_data = request.get_json()
-    events = in_data.get('events', [])
-    weights = in_data.get('weights', [])
-
-    # no events, error
-    if not events:
-        return jsonify({'status': 'error',
-                        'error_message': 'need a list of events'}), 400
-    # no weights, error
-    if not weights:
-        return jsonify({'status': 'error',
-                        'error_message': 'need a list of weights for each event'}), 400
-    # check len weights and events
-    if len(weights) != len(events):
-        return jsonify({'status': 'error',
-                        'error_message': 'need a weight for each event'}), 400
-
-    # success
-    return jsonify({'status': 'success',
-                    'return_value': random.choices(events, weights, k = 1)[0]}), 200
+                    'return_value': ret_image}), 200
